@@ -11,8 +11,8 @@ import android.content.pm.ServiceInfo;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.RelativeLayout;
 
-import com.edeqa.eventbus.AbstractEntityHolder;
 import com.edeqa.eventbus.EntityHolder;
 import com.edeqa.eventbus.EventBus;
 
@@ -20,17 +20,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TooManyListenersException;
-import java.util.logging.Level;
+
+import static com.edeqa.waytous.PluginService.ACTION_POST_EVENT;
 
 public class MainActivity extends Activity {
 
     private EventBus<EntityHolder> eventBus;
-    private int count = 0;
-    private Map<String, PluginService> pluginsMap = new LinkedHashMap<>();
-    private Map<String, String> servicesMap = new LinkedHashMap<>();
+    private Map<String, PluginConnection> pluginsMap = new LinkedHashMap<>();
     private IntentFilter packageFilter;
     private PackageBroadcastReceiver packageBroadcastReceiver;
-//    private ArrayList<HashMap<String, String>> services;
+    //    private ArrayList<HashMap<String, String>> services;
     private static final String LOG = "RESPLUGINAPP";
     private static final String ACTION_COLLECT_PLUGINS = "com.edeqa.waytous.intent.action.PLUGIN";
 
@@ -43,15 +42,19 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         try {
-            EventBus.LOGGING_LEVEL = Level.ALL;
             EventBus.setMainRunner(EventBus.RUNNER_DEFAULT);
             eventBus = new EventBus<>("app");
-            eventBus.register(new AbstractEntityHolder<Object>() {
-                @Override
-                public void setContext(Object context) {
-                    super.setContext(context);
-                }
-            });
+//            eventBus.register(new AbstractEntityHolder<Object>() {
+//                @Override
+//                public void setContext(Object context) {
+//                    super.setContext(context);
+//                }
+//
+//                @Override
+//                public String getType() {
+//                    return "FakeHolder";
+//                }
+//            });
         } catch (TooManyListenersException e) {
             e.printStackTrace();
         }
@@ -62,6 +65,7 @@ public class MainActivity extends Activity {
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
         packageFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
         packageFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+//        packageFilter.addAction(ACTION_POST_EVENT);
         packageFilter.addCategory(Intent.CATEGORY_DEFAULT);
         packageFilter.addDataScheme("package");
 
@@ -77,7 +81,9 @@ public class MainActivity extends Activity {
     protected void onStart() {
         super.onStart();
         Log.d(LOG, "onStart");
+//        registerReceiver(packageBroadcastReceiver, packageFilter);
         registerReceiver(packageBroadcastReceiver, packageFilter);
+        registerReceiver(packageBroadcastReceiver, new IntentFilter(ACTION_POST_EVENT));
         bindPlugins();
     }
 
@@ -89,13 +95,13 @@ public class MainActivity extends Activity {
     }
 
     private void bindPlugins() {
-        for(Map.Entry<String,String> entry: servicesMap.entrySet()) {
-            pluginsMap.put(entry.getKey(), new PluginService(this, eventBus, entry.getKey(), entry.getValue()).bind());
+        for(Map.Entry<String,PluginConnection> entry: pluginsMap.entrySet()) {
+            entry.getValue().bind();
         }
     }
 
     private void releasePlugins() {
-        for(Map.Entry<String,PluginService> entry: pluginsMap.entrySet()) {
+        for(Map.Entry<String,PluginConnection> entry: pluginsMap.entrySet()) {
             entry.getValue().unbind();
         }
     }
@@ -104,22 +110,19 @@ public class MainActivity extends Activity {
         PackageManager packageManager = getPackageManager();
         Intent baseIntent = new Intent(ACTION_COLLECT_PLUGINS);
         baseIntent.setFlags(Intent.FLAG_DEBUG_LOG_RESOLUTION);
-        List<ResolveInfo> list = packageManager.queryIntentServices(baseIntent, PackageManager.GET_RESOLVED_FILTER);
-        Log.d(LOG, "populatePluginList: " + list);
-        int i;
-        for (i = 0; i < list.size(); ++i) {
+        final List<ResolveInfo> list = packageManager.queryIntentServices(baseIntent, PackageManager.GET_RESOLVED_FILTER);
+        for (int i = 0; i < list.size(); ++i) {
             ResolveInfo info = list.get(i);
             ServiceInfo sinfo = info.serviceInfo;
-            Log.d(LOG, "populatePluginList: i: " + i + "; sinfo: " + sinfo);
             if (sinfo != null) {
-                servicesMap.put(sinfo.name, sinfo.packageName);
-//                inflateToView(i, packageManager, sinfo.packageName);
+                PluginConnection plugin = new PluginConnection(this, eventBus, sinfo.name, sinfo.packageName, onPluginConnected, onPluginDisconnected);
+                pluginsMap.put(sinfo.name, plugin);
             }
         }
         /*for (; i < 4; ++i) {
             initField(i);
         }*/
-        Log.d(LOG, "services: " + servicesMap);
+        Log.d(LOG, "services: " + pluginsMap);
     }
 
 /*
@@ -148,25 +151,6 @@ public class MainActivity extends Activity {
         parentView.addView(tv);
     }*/
 
-    /*private int selectRow(int rowCtr) {
-        int rowId = R.id.slot1;
-        switch (rowCtr) {
-            case 0:
-                rowId = R.id.slot1;
-                break;
-            case 1:
-                rowId = R.id.slot2;
-                break;
-            case 2:
-                rowId = R.id.slot3;
-                break;
-            case 3:
-                rowId = R.id.slot4;
-                break;
-        }
-        return rowId;
-    }
-*/
     /*private void adjustSubViewIds(ViewGroup parent, int idOffset) {
         for (int i = 0; i < parent.getChildCount(); ++i) {
             View v = parent.getChildAt(i);
@@ -180,16 +164,49 @@ public class MainActivity extends Activity {
         }
     }*/
 
+    private final Runnable1<PluginConnection> onPluginConnected = new Runnable1<PluginConnection>() {
+        @Override
+        public void call(final PluginConnection plugin) {
+            final RelativeLayout pluginsView = (RelativeLayout) findViewById(R.id.rl_plugins);
+            plugin.addViewTo(pluginsView);
+        }
+    };
 
+    private final Runnable1<PluginConnection> onPluginDisconnected = new Runnable1<PluginConnection>() {
+        @Override
+        public void call(PluginConnection plugin) {
+            plugin.removeView();
+        }
+    };
 
-    class PackageBroadcastReceiver extends BroadcastReceiver {
+    public static class PackageBroadcastReceiver extends BroadcastReceiver {
+
         private static final String LOG_TAG = "PBR";
 
+        public PackageBroadcastReceiver() {
+        }
+
         public void onReceive(Context context, Intent intent) {
-            Log.d(LOG_TAG, "onReceive: " + intent);
-            releasePlugins();
-            populatePluginList();
-            bindPlugins();
+            Log.d(LOG_TAG, "ONRECEIVE: " + intent);
+
+            switch(intent.getAction()) {
+                case ACTION_POST_EVENT:
+                    Log.w(LOG_TAG, "POSTEVENT:"+intent);
+                    String eventName = intent.getStringExtra("eventName");
+                    Object eventObject = intent.getSerializableExtra("eventObject");
+                    Log.w(LOG_TAG, "POSTEVENT:"+eventName+":"+eventObject);
+                    break;
+                case Intent.ACTION_PACKAGE_ADDED:
+                case Intent.ACTION_PACKAGE_REPLACED:
+                case Intent.ACTION_PACKAGE_REMOVED:
+                    ((MainActivity)context).releasePlugins();
+                    ((MainActivity)context).populatePluginList();
+                    ((MainActivity)context).bindPlugins();
+                    break;
+                default:
+                    Log.w(LOG_TAG, "ACTION:"+intent.getAction());
+                    break;
+            }
         }
     }
 

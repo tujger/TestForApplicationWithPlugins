@@ -17,8 +17,10 @@ import java.util.logging.Level;
 class EntityHolderAdapter implements EntityHolder {
 
     private static final String LOG_TAG = "EHA";
-    
+
     private final WaytousPlugin plugin;
+
+    private String type;
 
     public EntityHolderAdapter(WaytousPlugin plugin) {
         this.plugin = plugin;
@@ -26,34 +28,33 @@ class EntityHolderAdapter implements EntityHolder {
 
     @Override
     public void setContext(Object o) {
-        Bundle m = new Bundle();
-        m.putString("context", "context1");
         try {
+            Bundle m = new Bundle();
+            m.putSerializable("context", (Serializable) o);
             plugin.setContext(m);
-        } catch (RemoteException ex) {
-            Log.e(LOG_TAG, "setContext", ex);
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "setContext", e);
         }
     }
 
     @Override
     public String getType() {
-        String result = null;
+        if(type != null) return type;
         try {
-            result = plugin.getType();
-        } catch (RemoteException ex) {
-            Log.e(LOG_TAG, "getType", ex);
+            type = plugin.getType();
+
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, "getType", e);
         }
-        Log.d(LOG_TAG, "getType result: " + result);
-        return result;
+        return type;
     }
 
     @Override
     public void start() {
         try {
             plugin.start();
-            Log.e(LOG_TAG, "start");
-        } catch (RemoteException ex) {
-            Log.e(LOG_TAG, "start", ex);
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, "start", e);
         }
     }
 
@@ -61,9 +62,8 @@ class EntityHolderAdapter implements EntityHolder {
     public void finish() {
         try {
             plugin.finish();
-            Log.e(LOG_TAG, "finish");
-        } catch (RemoteException ex) {
-            Log.e(LOG_TAG, "finish", ex);
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, "finish", e);
         }
     }
 
@@ -72,26 +72,23 @@ class EntityHolderAdapter implements EntityHolder {
         List<String> result = null;
         try {
             result = plugin.events();
-        } catch (RemoteException ex) {
-            Log.e(LOG_TAG, "events", ex);
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, "events", e);
         }
-        Log.d(LOG_TAG, "events result: " + result);
         return result;
     }
 
     @Override
     public boolean onEvent(String s, Object o) {
-        System.out.println("TYPE:" + getType());
         boolean result = true;
         if (plugin != null) {
             try {
                 Bundle m = new Bundle();
                 m.putSerializable("object", (Serializable) o);
                 result = plugin.onEvent(s, m);
-            } catch (RemoteException ex) {
-                Log.e(LOG_TAG, "onEvent", ex);
+            } catch (RemoteException e) {
+                Log.e(LOG_TAG, "onEvent", e);
             }
-            Log.d(LOG_TAG, "getType result: " + result);
         }
         return result;
     }
@@ -100,11 +97,11 @@ class EntityHolderAdapter implements EntityHolder {
     public void setLoggingLevel(Level level) {
         try {
             Bundle m = new Bundle();
-            m.putSerializable("object", (Serializable) level);
+            m.putSerializable("level", level);
             plugin.setLoggingLevel(m);
-            Log.e(LOG_TAG, "setLoggingLevel");
-        } catch (RemoteException ex) {
-            Log.e(LOG_TAG, "setLoggingLevel", ex);
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, "setLoggingLevel", e);
         }
     }
+
 }
